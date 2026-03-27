@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后结构主义知识图谱</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0a0e17; color: #c9d1d9; overflow: hidden; }
+
+#graph { width: 100vw; height: 100vh; }
+
+/* Info panel */
+#panel {
+  position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
+  background: rgba(13,17,23,0.96); border-left: 1px solid #30363d;
+  padding: 24px; overflow-y: auto; transition: right 0.3s ease;
+  backdrop-filter: blur(12px); z-index: 10;
+}
+#panel.open { right: 0; }
+#panel-close {
+  position: absolute; top: 12px; right: 16px; background: none; border: none;
+  color: #8b949e; font-size: 22px; cursor: pointer; line-height: 1;
+}
+#panel-close:hover { color: #f0f6fc; }
+#panel h2 { font-size: 24px; margin-bottom: 4px; }
+#panel .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 16px; }
+#panel .desc { font-size: 14px; line-height: 1.6; margin-bottom: 20px; color: #e6edf3; }
+#panel .section-title { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 8px; }
+#panel .tag {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 12px; margin: 2px 4px 2px 0;
+}
+#panel .rel-item {
+  display: flex; align-items: baseline; gap: 8px; padding: 8px 0;
+  border-bottom: 1px solid #21262d; font-size: 13px; cursor: pointer;
+}
+#panel .rel-item:hover { background: rgba(88,166,255,0.06); }
+#panel .rel-arrow { color: #8b949e; font-size: 11px; min-width: 20px; text-align: center; }
+#panel .rel-name { color: #58a6ff; font-weight: 600; }
+#panel .rel-type { color: #8b949e; font-size: 11px; }
+#panel .rel-note { color: #8b949e; font-size: 11px; margin-top: 2px; }
+
+/* Legend */
+#legend {
+  position: fixed; bottom: 16px; left: 16px; background: rgba(13,17,23,0.9);
+  border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px;
+  font-size: 11px; z-index: 5; backdrop-filter: blur(8px);
+}
+#legend .row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+#legend .line { width: 20px; height: 0; border-top: 2px; }
+
+/* Title */
+#title {
+  position: fixed; top: 16px; left: 16px; z-index: 5;
+  font-size: 16px; font-weight: 700; color: #e6edf3;
+  background: rgba(13,17,23,0.8); padding: 8px 14px; border-radius: 8px;
+  backdrop-filter: blur(8px); border: 1px solid #30363d;
+}
+#title small { font-weight: 400; color: #8b949e; font-size: 12px; display: block; margin-top: 2px; }
+
+/* Filter buttons */
+#filters {
+  position: fixed; top: 16px; right: 16px; z-index: 5;
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+#filters button {
+  padding: 5px 12px; border-radius: 14px; border: 1px solid #30363d;
+  background: rgba(13,17,23,0.8); color: #c9d1d9; font-size: 12px;
+  cursor: pointer; backdrop-filter: blur(8px); transition: all 0.2s;
+}
+#filters button:hover { border-color: #58a6ff; color: #58a6ff; }
+#filters button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="title">
+  后结构主义知识图谱
+  <small>语言 · 爱情 · 货币 — 点击节点探索概念关系</small>
+</div>
+
+<div id="filters">
+  <button class="active" data-filter="all">全部</button>
+  <button data-filter="language">语言</button>
+  <button data-filter="love">爱情</button>
+  <button data-filter="money">货币</button>
+  <button data-filter="cross">跨域同构</button>
+  <button data-filter="structure">结构归属</button>
+</div>
+
+<div id="graph"></div>
+
+<div id="panel">
+  <button id="panel-close">&times;</button>
+  <h2 id="p-name"></h2>
+  <div class="subtitle" id="p-subtitle"></div>
+  <div class="desc" id="p-desc"></div>
+  <div id="p-domains"></div>
+  <div id="p-relations"></div>
+</div>
+
+<div id="legend">
+  <div class="row"><span class="dot" style="background:#f0883e"></span> 领域 (Domain)</div>
+  <div class="row"><span class="dot" style="background:#7ee787"></span> 元概念 (Meta)</div>
+  <div class="row"><span class="dot" style="background:#58a6ff"></span> 语言</div>
+  <div class="row"><span class="dot" style="background:#f778ba"></span> 爱情</div>
+  <div class="row"><span class="dot" style="background:#d2a8ff"></span> 货币</div>
+  <div class="row"><span class="dot" style="background:#ffd700"></span> 理论家</div>
+  <div class="row"><span class="dot" style="background:#39d353"></span> 聚类 (Cluster)</div>
+  <div class="row" style="margin-top:6px"><span style="width:20px;border-top:2px solid #8b949e;display:inline-block"></span> RELATES_TO</div>
+  <div class="row"><span style="width:20px;border-top:2px dashed #f0883e;display:inline-block"></span> 跨域同构</div>
+  <div class="row"><span style="width:20px;border-top:2px dotted #ffd700;display:inline-block"></span> EMPHASIZES</div>
+  <div class="row"><span style="width:20px;border-top:2px solid #3fb950;display:inline-block"></span> HAS_CONCEPT / BELONGS_TO</div>
+  <div class="row"><span style="width:20px;border-top:2px solid #58a6ff;display:inline-block"></span> PART_OF / HAS_CLUSTER</div>
+</div>
+
+<script>
+const GRAPH = {"nodes": [{"id": "language", "label": "语言", "type": "Domain", "category": "domain", "description": "符号差异生成意义的网络", "domains": []}, {"id": "love", "label": "爱情", "type": "Domain", "category": "domain", "description": "欲望、投射与他者关系生成的情感符号网络", "domains": []}, {"id": "money", "label": "货币", "type": "Domain", "category": "domain", "description": "价值、信用与权力共同维持的交换符号网络", "domains": []}, {"id": "difference", "label": "差异", "type": "Concept", "category": "meta", "description": "意义来自差别，而非本体", "domains": ["language", "love", "money"]}, {"id": "sign", "label": "符号", "type": "Concept", "category": "meta", "description": "承载意义但意义不固定的单位", "domains": ["language", "money"]}, {"id": "power", "label": "权力", "type": "Concept", "category": "meta", "description": "塑造、限制并组织意义与关系", "domains": ["language", "love", "money", "subject"]}, {"id": "other", "label": "他者", "type": "Concept", "category": "meta", "description": "自我借以定位自身的外部结构", "domains": ["love", "subject"]}, {"id": "fiction", "label": "虚构", "type": "Concept", "category": "meta", "description": "被共同相信的结构性构造", "domains": ["love", "money", "subject"]}, {"id": "flow", "label": "流动", "type": "Concept", "category": "meta", "description": "意义、情感或价值在网络中的迁移", "domains": ["language", "love", "money"]}, {"id": "narrative", "label": "叙事", "type": "Concept", "category": "meta", "description": "组织认知与预期的解释框架", "domains": ["language", "love", "money", "subject"]}, {"id": "stability", "label": "稳定", "type": "Concept", "category": "meta", "description": "结构暂时被维持的状态", "domains": ["language", "love", "money", "subject"]}, {"id": "collapse", "label": "崩解", "type": "Concept", "category": "meta", "description": "结构失稳、瓦解或转相的状态", "domains": ["language", "love", "money", "subject"]}, {"id": "signifier", "label": "能指", "type": "Concept", "category": "language_core", "description": "可感知的符号形式", "domains": ["language"]}, {"id": "signified", "label": "所指", "type": "Concept", "category": "language_core", "description": "符号指向的概念内容", "domains": ["language"]}, {"id": "differance", "label": "延异", "type": "Concept", "category": "language_core", "description": "意义不断延迟并通过差异显现", "domains": ["language"]}, {"id": "syntax", "label": "语法", "type": "Concept", "category": "language_core", "description": "符号排列规则", "domains": ["language"]}, {"id": "semantic_field", "label": "语义场", "type": "Concept", "category": "language_core", "description": "词语彼此限定的意义空间", "domains": ["language"]}, {"id": "discourse", "label": "话语", "type": "Concept", "category": "language_core", "description": "社会中可被说出的方式", "domains": ["language"]}, {"id": "polysemy", "label": "多义性", "type": "Concept", "category": "language_core", "description": "一个符号具有多个可能意义", "domains": ["language"]}, {"id": "slippage", "label": "滑动", "type": "Concept", "category": "language_core", "description": "意义不被固定并持续迁移", "domains": ["language"]}, {"id": "misreading", "label": "误读", "type": "Concept", "category": "language_core", "description": "理解偏移或重新编排", "domains": ["language"]}, {"id": "binary_opposition", "label": "二元对立", "type": "Concept", "category": "language_core", "description": "概念通过对立被界定", "domains": ["language"]}, {"id": "desire", "label": "欲望", "type": "Concept", "category": "love_core", "description": "由缺失驱动的趋近运动", "domains": ["love"]}, {"id": "lack", "label": "缺失", "type": "Concept", "category": "love_core", "description": "主体内部不可被填满的空位", "domains": ["love"]}, {"id": "projection", "label": "投射", "type": "Concept", "category": "love_core", "description": "将内在需求投到他者身上", "domains": ["love"]}, {"id": "idealization", "label": "理想化", "type": "Concept", "category": "love_core", "description": "把他者提升为理想对象", "domains": ["love"]}, {"id": "mirror", "label": "镜像", "type": "Concept", "category": "love_core", "description": "在他者中映照自我", "domains": ["love"]}, {"id": "attachment", "label": "依附", "type": "Concept", "category": "love_core", "description": "关系持续的心理黏着", "domains": ["love"]}, {"id": "control", "label": "控制", "type": "Concept", "category": "love_core", "description": "试图固定关系与他者的不确定性", "domains": ["love"]}, {"id": "ritual", "label": "仪式", "type": "Concept", "category": "love_core", "description": "关系被重复确认的象征行为", "domains": ["love"]}, {"id": "commitment", "label": "承诺", "type": "Concept", "category": "love_core", "description": "对未来关系的符号性绑定", "domains": ["love"]}, {"id": "disillusion", "label": "幻灭", "type": "Concept", "category": "love_core", "description": "理想化结构的破裂", "domains": ["love"]}, {"id": "reconstruction", "label": "重构", "type": "Concept", "category": "love_core", "description": "关系意义的重新组织", "domains": ["love"]}, {"id": "jealousy", "label": "嫉妒", "type": "Concept", "category": "love_core", "description": "对他者占有不确定性的反应", "domains": ["love"]}, {"id": "value", "label": "价值", "type": "Concept", "category": "money_core", "description": "被交换系统标记的可比较性", "domains": ["money"]}, {"id": "credit", "label": "信用", "type": "Concept", "category": "money_core", "description": "以未来偿付为前提的信任结构", "domains": ["money"]}, {"id": "trust", "label": "信任", "type": "Concept", "category": "money_core", "description": "对结构持续有效的预设", "domains": ["money"]}, {"id": "expectation", "label": "预期", "type": "Concept", "category": "money_core", "description": "对未来价格或偿付的判断", "domains": ["money"]}, {"id": "state", "label": "国家", "type": "Concept", "category": "money_core", "description": "提供法权与征税基础的制度主体", "domains": ["money"]}, {"id": "coercion", "label": "强制力", "type": "Concept", "category": "money_core", "description": "制度对秩序的强制维持能力", "domains": ["money"]}, {"id": "liquidity", "label": "流动性", "type": "Concept", "category": "money_core", "description": "资产快速交换而不显著折价的能力", "domains": ["money"]}, {"id": "exchange", "label": "交换", "type": "Concept", "category": "money_core", "description": "价值在主体之间转移", "domains": ["money"]}, {"id": "price", "label": "价格", "type": "Concept", "category": "money_core", "description": "差异化价值的可见刻度", "domains": ["money"]}, {"id": "finance_system", "label": "金融体系", "type": "Concept", "category": "money_core", "description": "组织信用与资本流动的制度网络", "domains": ["money"]}, {"id": "market", "label": "市场", "type": "Concept", "category": "money_core", "description": "价格、预期与交换形成的外部参照网络", "domains": ["money"]}, {"id": "debt", "label": "债务", "type": "Concept", "category": "money_core", "description": "未来偿付义务的制度表达", "domains": ["money"]}, {"id": "derrida", "label": "德里达", "type": "Theory", "category": "theory", "description": "", "domains": []}, {"id": "lacan", "label": "拉康", "type": "Theory", "category": "theory", "description": "", "domains": []}, {"id": "foucault", "label": "福柯", "type": "Theory", "category": "theory", "description": "", "domains": []}, {"id": "barthes", "label": "巴特", "type": "Theory", "category": "theory", "description": "", "domains": []}, {"id": "graeber", "label": "格雷伯", "type": "Theory", "category": "theory", "description": "", "domains": []}, {"id": "language_slippage_cluster", "label": "语言滑动结构", "type": "Cluster", "category": "cluster", "description": "由差异、延异、多义性、滑动与误读构成的语言不稳定团块", "domains": []}, {"id": "love_projection_cluster", "label": "爱情投射结构", "type": "Cluster", "category": "cluster", "description": "由缺失、欲望、他者、投射、理想化构成的亲密关系生成团块", "domains": []}, {"id": "money_credit_cycle_cluster", "label": "货币信用循环", "type": "Cluster", "category": "cluster", "description": "由信用、信任、预期、价格、叙事构成的金融意义循环", "domains": []}, {"id": "cross_domain_homology_cluster", "label": "跨域同构桥", "type": "Cluster", "category": "cluster", "description": "连接语言、爱情、货币三域的结构同构团块", "domains": []}, {"id": "subject", "label": "主体", "type": "Domain", "category": "domain", "description": "主体不是固定本体，而是在语言、欲望、权力与交换中被生产出来的位置", "domains": ["subject"]}, {"id": "self", "label": "自我", "type": "Concept", "category": "subject_core", "description": "主体对自身连续性的经验组织", "domains": ["subject"]}, {"id": "identity", "label": "身份", "type": "Concept", "category": "subject_core", "description": "主体在社会语境中被识别和固定的标签结构", "domains": ["subject"]}, {"id": "identification", "label": "认同", "type": "Concept", "category": "subject_core", "description": "主体通过模仿、承接与归属形成自身", "domains": ["subject"]}, {"id": "subjectivation", "label": "主体化", "type": "Concept", "category": "subject_core", "description": "主体被权力与规范塑造为可治理对象的过程", "domains": ["subject"]}, {"id": "gaze", "label": "凝视", "type": "Concept", "category": "subject_core", "description": "主体在他者观看中意识到自身的位置", "domains": ["subject"]}, {"id": "split_subject", "label": "分裂主体", "type": "Concept", "category": "subject_core", "description": "主体内部并不统一，而是被语言与欲望撕裂", "domains": ["subject"]}, {"id": "persona", "label": "面具", "type": "Concept", "category": "subject_core", "description": "主体向外呈现的社会角色外壳", "domains": ["subject"]}, {"id": "desiring_machine", "label": "欲望机器", "type": "Concept", "category": "subject_core", "description": "主体并非静止自我，而是不断连接与生产欲望的机制", "domains": ["subject"]}, {"id": "self_narrative", "label": "自我叙事", "type": "Concept", "category": "subject_core", "description": "主体通过讲述自己来维持连续性", "domains": ["subject"]}, {"id": "position", "label": "位置", "type": "Concept", "category": "subject_core", "description": "主体在结构中的相对坐标与可行动空间", "domains": ["subject"]}, {"id": "naming", "label": "命名", "type": "Concept", "category": "subject_core", "description": "通过符号赋名把主体纳入结构", "domains": ["subject"]}, {"id": "recognition", "label": "承认", "type": "Concept", "category": "subject_core", "description": "主体从他者处获得存在确认", "domains": ["subject"]}, {"id": "alienation", "label": "异化", "type": "Concept", "category": "subject_core", "description": "主体与自身、劳动、欲望或意义的疏离", "domains": ["subject"]}, {"id": "discipline", "label": "规训", "type": "Concept", "category": "subject_core", "description": "通过规范化实践塑造主体行为", "domains": ["subject"]}, {"id": "subject_production_cluster", "label": "主体生产结构", "type": "Cluster", "category": "cluster", "description": "主体通过命名、认同、凝视、规训与叙事被不断生产和重组", "domains": []}, {"id": "butler", "label": "巴特勒", "type": "Theory", "category": "theory", "description": "", "domains": []}, {"id": "deleuze_guattari", "label": "德勒兹-瓜塔里", "type": "Theory", "category": "theory", "description": "", "domains": []}], "edges": [{"source": "language", "target": "sign", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "sign", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "difference", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "difference", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "power", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "power", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "flow", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "flow", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "narrative", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "narrative", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "stability", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "stability", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "collapse", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "collapse", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "signifier", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "signifier", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "signified", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "signified", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "differance", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "differance", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "syntax", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "syntax", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "semantic_field", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "semantic_field", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "discourse", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "discourse", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "polysemy", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "polysemy", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "slippage", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "slippage", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "misreading", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "misreading", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "language", "target": "binary_opposition", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "binary_opposition", "target": "language", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "difference", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "difference", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "power", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "power", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "other", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "other", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "fiction", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "fiction", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "flow", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "flow", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "narrative", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "narrative", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "stability", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "stability", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "collapse", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "collapse", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "desire", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "desire", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "lack", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "lack", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "projection", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "projection", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "idealization", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "idealization", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "mirror", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "mirror", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "attachment", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "attachment", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "control", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "control", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "ritual", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "ritual", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "commitment", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "commitment", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "disillusion", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "disillusion", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "reconstruction", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "reconstruction", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "jealousy", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "jealousy", "target": "love", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "sign", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "sign", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "difference", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "difference", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "power", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "power", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "fiction", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "fiction", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "flow", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "flow", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "narrative", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "narrative", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "stability", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "stability", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "collapse", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "collapse", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "value", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "value", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "credit", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "credit", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "trust", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "trust", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "expectation", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "expectation", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "state", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "state", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "coercion", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "coercion", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "liquidity", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "liquidity", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "exchange", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "exchange", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "price", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "price", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "finance_system", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "finance_system", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "market", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "market", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "debt", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "debt", "target": "money", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "signifier", "target": "signified", "rel": "RELATES_TO", "subType": "mediates", "weight": 0.8, "note": "能指中介所指"}, {"source": "difference", "target": "sign", "rel": "RELATES_TO", "subType": "constitutes", "weight": 1.0, "note": "差异构成符号意义"}, {"source": "differance", "target": "difference", "rel": "RELATES_TO", "subType": "destabilizes", "weight": 0.95, "note": "延异使意义永不完全封闭"}, {"source": "syntax", "target": "signifier", "rel": "RELATES_TO", "subType": "organizes", "weight": 0.78, "note": "语法组织能指链"}, {"source": "semantic_field", "target": "difference", "rel": "RELATES_TO", "subType": "depends_on", "weight": 0.88, "note": "语义场依赖差异边界"}, {"source": "discourse", "target": "power", "rel": "RELATES_TO", "subType": "circulates_through", "weight": 0.9, "note": "权力经由话语运作"}, {"source": "polysemy", "target": "slippage", "rel": "RELATES_TO", "subType": "produces", "weight": 0.85, "note": "多义性导致意义滑动"}, {"source": "slippage", "target": "misreading", "rel": "RELATES_TO", "subType": "produces", "weight": 0.8, "note": "意义滑动导致误读"}, {"source": "binary_opposition", "target": "difference", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.72, "note": "二元对立暂时固定差异边界"}, {"source": "misreading", "target": "narrative", "rel": "RELATES_TO", "subType": "reconfigures", "weight": 0.67, "note": "误读可生成新叙事"}, {"source": "lack", "target": "desire", "rel": "RELATES_TO", "subType": "produces", "weight": 1.0, "note": "缺失生成欲望"}, {"source": "desire", "target": "other", "rel": "RELATES_TO", "subType": "projects_to", "weight": 0.9, "note": "欲望指向他者"}, {"source": "other", "target": "projection", "rel": "RELATES_TO", "subType": "mediates", "weight": 0.75, "note": "他者常被投射化"}, {"source": "projection", "target": "idealization", "rel": "RELATES_TO", "subType": "produces", "weight": 0.85, "note": "投射生产理想化"}, {"source": "idealization", "target": "attachment", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.6, "note": "理想化暂时稳定依附"}, {"source": "attachment", "target": "control", "rel": "RELATES_TO", "subType": "transforms_into", "weight": 0.55, "note": "依附可能转化为控制"}, {"source": "ritual", "target": "commitment", "rel": "RELATES_TO", "subType": "symbolizes", "weight": 0.8, "note": "仪式符号化承诺"}, {"source": "idealization", "target": "disillusion", "rel": "RELATES_TO", "subType": "destabilizes", "weight": 0.7, "note": "理想化终会走向幻灭"}, {"source": "disillusion", "target": "reconstruction", "rel": "RELATES_TO", "subType": "produces", "weight": 0.75, "note": "幻灭后进入关系重构"}, {"source": "mirror", "target": "idealization", "rel": "RELATES_TO", "subType": "supports", "weight": 0.66, "note": "镜像机制支持理想化"}, {"source": "jealousy", "target": "control", "rel": "RELATES_TO", "subType": "intensifies", "weight": 0.74, "note": "嫉妒强化控制冲动"}, {"source": "commitment", "target": "stability", "rel": "RELATES_TO", "subType": "aims_at", "weight": 0.69, "note": "承诺试图维持关系稳定"}, {"source": "sign", "target": "value", "rel": "RELATES_TO", "subType": "symbolizes", "weight": 0.85, "note": "货币符号化价值"}, {"source": "credit", "target": "trust", "rel": "RELATES_TO", "subType": "depends_on", "weight": 1.0, "note": "信用依赖信任"}, {"source": "trust", "target": "expectation", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.8, "note": "信任稳定预期"}, {"source": "expectation", "target": "price", "rel": "RELATES_TO", "subType": "produces", "weight": 0.75, "note": "预期影响价格"}, {"source": "exchange", "target": "liquidity", "rel": "RELATES_TO", "subType": "circulates_through", "weight": 0.8, "note": "交换经由流动性实现"}, {"source": "state", "target": "coercion", "rel": "RELATES_TO", "subType": "authorizes", "weight": 0.9, "note": "国家通过强制力赋权货币"}, {"source": "coercion", "target": "credit", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.65, "note": "制度强制力强化信用结构"}, {"source": "narrative", "target": "credit", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.7, "note": "叙事维持信用共识"}, {"source": "price", "target": "narrative", "rel": "RELATES_TO", "subType": "feeds_back_to", "weight": 0.6, "note": "价格反过来塑造市场叙事"}, {"source": "market", "target": "price", "rel": "RELATES_TO", "subType": "generates", "weight": 0.84, "note": "市场生成价格"}, {"source": "debt", "target": "credit", "rel": "RELATES_TO", "subType": "instantiates", "weight": 0.82, "note": "债务是信用的制度实例"}, {"source": "finance_system", "target": "flow", "rel": "RELATES_TO", "subType": "organizes", "weight": 0.77, "note": "金融体系组织资本流动"}, {"source": "sign", "target": "projection", "rel": "SHARES_STRUCTURE_WITH", "subType": "symbolic_substitution", "weight": 0.84, "note": "符号替代意义，如投射替代真实他者"}, {"source": "difference", "target": "price", "rel": "SHARES_STRUCTURE_WITH", "subType": "relational_value", "weight": 0.89, "note": "价格不是本体，而是差异性定位"}, {"source": "desire", "target": "credit", "rel": "SHARES_STRUCTURE_WITH", "subType": "future_binding", "weight": 0.83, "note": "两者都指向尚未实现但被当前结构驱动的未来"}, {"source": "other", "target": "market", "rel": "SHARES_STRUCTURE_WITH", "subType": "external_reference", "weight": 0.79, "note": "主体在外部结构中确认自身位置"}, {"source": "trust", "target": "commitment", "rel": "SHARES_STRUCTURE_WITH", "subType": "stability_contract", "weight": 0.78, "note": "信任与承诺都用于维持关系持续"}, {"source": "fiction", "target": "idealization", "rel": "SHARES_STRUCTURE_WITH", "subType": "collective_or_personal_fiction", "weight": 0.8, "note": "虚构可能是集体共识，也可能是亲密关系中的理想化"}, {"source": "discourse", "target": "narrative", "rel": "SHARES_STRUCTURE_WITH", "subType": "meaning_organization", "weight": 0.76, "note": "两者都组织可被理解的世界"}, {"source": "ritual", "target": "sign", "rel": "SHARES_STRUCTURE_WITH", "subType": "symbolic_repetition", "weight": 0.73, "note": "仪式和符号都通过重复巩固意义"}, {"source": "collapse", "target": "disillusion", "rel": "SHARES_STRUCTURE_WITH", "subType": "structural_break", "weight": 0.75, "note": "崩解与幻灭都指向既有结构的断裂"}, {"source": "flow", "target": "liquidity", "rel": "SHARES_STRUCTURE_WITH", "subType": "movement_capacity", "weight": 0.81, "note": "流动与流动性都表征在网络中移动的能力"}, {"source": "derrida", "target": "differance", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "derrida", "target": "slippage", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "lacan", "target": "desire", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "lacan", "target": "lack", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "lacan", "target": "other", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "foucault", "target": "power", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "foucault", "target": "discourse", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "barthes", "target": "sign", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "graeber", "target": "debt", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "graeber", "target": "credit", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "difference", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "differance", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "polysemy", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "slippage", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "misreading", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "signifier", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "signified", "target": "language_slippage_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "lack", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "desire", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "other", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "projection", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "idealization", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "mirror", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "attachment", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "disillusion", "target": "love_projection_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "credit", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "trust", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "expectation", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "price", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "narrative", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "market", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "debt", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "value", "target": "money_credit_cycle_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "difference", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "sign", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "desire", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "credit", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "other", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "market", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "fiction", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "idealization", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "flow", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "liquidity", "target": "cross_domain_homology_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "narrative", "target": "expectation", "rel": "RELATES_TO", "subType": "shapes", "weight": 0.76, "note": "叙事塑造预期"}, {"source": "expectation", "target": "trust", "rel": "RELATES_TO", "subType": "reinforces_or_erodes", "weight": 0.64, "note": "预期兑现或破裂会反向强化或侵蚀信任"}, {"source": "trust", "target": "credit", "rel": "RELATES_TO", "subType": "enables", "weight": 0.86, "note": "信任使信用可以扩张"}, {"source": "credit", "target": "debt", "rel": "RELATES_TO", "subType": "materializes_as", "weight": 0.83, "note": "信用落实为债务形式"}, {"source": "debt", "target": "narrative", "rel": "RELATES_TO", "subType": "requires_justification", "weight": 0.59, "note": "债务常需要道德或制度叙事支撑"}, {"source": "attachment", "target": "jealousy", "rel": "RELATES_TO", "subType": "feeds", "weight": 0.63, "note": "依附越强，越可能激发嫉妒"}, {"source": "jealousy", "target": "other", "rel": "RELATES_TO", "subType": "fixates_on", "weight": 0.7, "note": "嫉妒会强化对他者位置的执着"}, {"source": "disillusion", "target": "lack", "rel": "RELATES_TO", "subType": "returns_to", "weight": 0.72, "note": "幻灭把主体带回更原初的缺失感"}, {"source": "commitment", "target": "ritual", "rel": "RELATES_TO", "subType": "seeks_reaffirmation", "weight": 0.67, "note": "承诺需要通过仪式不断被重申"}, {"source": "misreading", "target": "difference", "rel": "RELATES_TO", "subType": "reopens", "weight": 0.61, "note": "误读重新打开差异空间"}, {"source": "discourse", "target": "binary_opposition", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.69, "note": "话语通过二元对立固定可说性边界"}, {"source": "binary_opposition", "target": "slippage", "rel": "RELATES_TO", "subType": "provokes", "weight": 0.52, "note": "越强的固定，越会诱发意义滑动"}, {"source": "idealization", "target": "value", "rel": "SHARES_STRUCTURE_WITH", "subType": "inflated_attribution", "weight": 0.82, "note": "理想化与价值高估都属于过度赋值"}, {"source": "attachment", "target": "debt", "rel": "SHARES_STRUCTURE_WITH", "subType": "binding_structure", "weight": 0.74, "note": "依附与债务都表现为持续绑定"}, {"source": "discourse", "target": "market", "rel": "SHARES_STRUCTURE_WITH", "subType": "ordering_field", "weight": 0.71, "note": "话语与市场都作为排序与分配场"}, {"source": "signifier", "target": "price", "rel": "SHARES_STRUCTURE_WITH", "subType": "surface_marker", "weight": 0.68, "note": "能指和价格都作为表层可见标记"}, {"source": "lack", "target": "debt", "rel": "SHARES_STRUCTURE_WITH", "subType": "structural_insufficiency", "weight": 0.77, "note": "缺失与债务都标记一种未完成状态"}, {"source": "fiction", "target": "credit", "rel": "SHARES_STRUCTURE_WITH", "subType": "belief_supported_reality", "weight": 0.81, "note": "虚构与信用都依赖被共同相信"}, {"source": "ritual", "target": "narrative", "rel": "SHARES_STRUCTURE_WITH", "subType": "repetition_of_meaning", "weight": 0.7, "note": "仪式和叙事都通过重复来维持意义"}, {"source": "language", "target": "language_slippage_cluster", "rel": "HAS_CLUSTER", "subType": "", "weight": 0.5, "note": ""}, {"source": "love", "target": "love_projection_cluster", "rel": "HAS_CLUSTER", "subType": "", "weight": 0.5, "note": ""}, {"source": "money", "target": "money_credit_cycle_cluster", "rel": "HAS_CLUSTER", "subType": "", "weight": 0.5, "note": ""}, {"source": "language_slippage_cluster", "target": "cross_domain_homology_cluster", "rel": "RELATES_TO", "subType": "bridged_by", "weight": 0.66, "note": ""}, {"source": "love_projection_cluster", "target": "cross_domain_homology_cluster", "rel": "RELATES_TO", "subType": "bridged_by", "weight": 0.79, "note": ""}, {"source": "money_credit_cycle_cluster", "target": "cross_domain_homology_cluster", "rel": "RELATES_TO", "subType": "bridged_by", "weight": 0.77, "note": ""}, {"source": "subject", "target": "subject", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "self", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "self", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "identity", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "identity", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "identification", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "identification", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "subjectivation", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "subjectivation", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "gaze", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "gaze", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "split_subject", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "split_subject", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "persona", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "persona", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "desiring_machine", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "desiring_machine", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "self_narrative", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "self_narrative", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "position", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "position", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "naming", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "naming", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "recognition", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "recognition", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "alienation", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "alienation", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "discipline", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "discipline", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "power", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "power", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "other", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "other", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "narrative", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "narrative", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "fiction", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "fiction", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "stability", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "stability", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "collapse", "rel": "HAS_CONCEPT", "subType": "", "weight": 0.5, "note": ""}, {"source": "collapse", "target": "subject", "rel": "BELONGS_TO", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "subject_production_cluster", "rel": "HAS_CLUSTER", "subType": "", "weight": 0.5, "note": ""}, {"source": "subject", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "self", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "identity", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "identification", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "subjectivation", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "gaze", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "split_subject", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "persona", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "desiring_machine", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "self_narrative", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "position", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "naming", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "recognition", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "alienation", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "discipline", "target": "subject_production_cluster", "rel": "PART_OF", "subType": "", "weight": 0.5, "note": ""}, {"source": "naming", "target": "subject", "rel": "RELATES_TO", "subType": "constitutes", "weight": 0.84, "note": "命名把主体纳入可识别结构"}, {"source": "subject", "target": "position", "rel": "RELATES_TO", "subType": "occupies", "weight": 0.78, "note": "主体总以某种结构位置存在"}, {"source": "position", "target": "identity", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.72, "note": "位置帮助身份暂时稳定"}, {"source": "identity", "target": "persona", "rel": "RELATES_TO", "subType": "appears_as", "weight": 0.74, "note": "身份常经由面具向外呈现"}, {"source": "recognition", "target": "self", "rel": "RELATES_TO", "subType": "supports", "weight": 0.71, "note": "承认为自我连续性提供支撑"}, {"source": "gaze", "target": "self", "rel": "RELATES_TO", "subType": "disturbs", "weight": 0.69, "note": "凝视使自我意识到自身被观看"}, {"source": "self", "target": "self_narrative", "rel": "RELATES_TO", "subType": "maintains_through", "weight": 0.8, "note": "自我通过叙述自己来维持连续性"}, {"source": "self_narrative", "target": "stability", "rel": "RELATES_TO", "subType": "aims_at", "weight": 0.68, "note": "自我叙事试图维持主体稳定"}, {"source": "subjectivation", "target": "discipline", "rel": "RELATES_TO", "subType": "operates_through", "weight": 0.82, "note": "主体化经由规训机制运作"}, {"source": "discipline", "target": "persona", "rel": "RELATES_TO", "subType": "shapes", "weight": 0.73, "note": "规训塑造可被接受的社会面具"}, {"source": "split_subject", "target": "collapse", "rel": "RELATES_TO", "subType": "tends_toward", "weight": 0.67, "note": "分裂主体内含失稳趋势"}, {"source": "collapse", "target": "self_narrative", "rel": "RELATES_TO", "subType": "demands_reconstruction", "weight": 0.71, "note": "崩解之后需要通过新叙事重构主体"}, {"source": "desiring_machine", "target": "subject", "rel": "RELATES_TO", "subType": "destabilizes", "weight": 0.76, "note": "欲望机器打破主体作为固定中心的想象"}, {"source": "alienation", "target": "self", "rel": "RELATES_TO", "subType": "separates_from", "weight": 0.75, "note": "异化使主体与自身经验疏离"}, {"source": "identification", "target": "identity", "rel": "RELATES_TO", "subType": "produces", "weight": 0.79, "note": "认同机制生产身份"}, {"source": "recognition", "target": "identity", "rel": "RELATES_TO", "subType": "stabilizes", "weight": 0.72, "note": "承认会暂时稳定身份"}, {"source": "identity", "target": "gaze", "rel": "RELATES_TO", "subType": "exposes_to", "weight": 0.64, "note": "身份总暴露在他者凝视之下"}, {"source": "gaze", "target": "split_subject", "rel": "RELATES_TO", "subType": "intensifies", "weight": 0.7, "note": "凝视加剧主体内部裂缝"}, {"source": "split_subject", "target": "self_narrative", "rel": "RELATES_TO", "subType": "forces", "weight": 0.73, "note": "主体分裂迫使主体重写自我叙事"}, {"source": "self_narrative", "target": "recognition", "rel": "RELATES_TO", "subType": "seeks", "weight": 0.69, "note": "自我叙事需要他者承认来完成闭环"}, {"source": "naming", "target": "sign", "rel": "SHARES_STRUCTURE_WITH", "subType": "symbolic_inscription", "weight": 0.83, "note": "命名是通过符号把主体写入结构"}, {"source": "self_narrative", "target": "narrative", "rel": "SHARES_STRUCTURE_WITH", "subType": "identity_story", "weight": 0.87, "note": "自我叙事是叙事机制在主体上的内化"}, {"source": "identity", "target": "discourse", "rel": "SHARES_STRUCTURE_WITH", "subType": "discursive_positioning", "weight": 0.78, "note": "身份在话语中被命名、排序与固定"}, {"source": "split_subject", "target": "slippage", "rel": "SHARES_STRUCTURE_WITH", "subType": "instability_of_fixity", "weight": 0.8, "note": "主体分裂与意义滑动都打破固定性"}, {"source": "persona", "target": "signifier", "rel": "SHARES_STRUCTURE_WITH", "subType": "surface_form", "weight": 0.72, "note": "面具和能指都作为表层形式出现"}, {"source": "recognition", "target": "other", "rel": "SHARES_STRUCTURE_WITH", "subType": "confirmation_from_other", "weight": 0.79, "note": "承认需要来自他者"}, {"source": "gaze", "target": "idealization", "rel": "SHARES_STRUCTURE_WITH", "subType": "imaginary_projection", "weight": 0.7, "note": "凝视和理想化都重构对象的形象"}, {"source": "identification", "target": "mirror", "rel": "SHARES_STRUCTURE_WITH", "subType": "mirrored_self_formation", "weight": 0.82, "note": "认同经常通过镜像机制形成"}, {"source": "split_subject", "target": "lack", "rel": "SHARES_STRUCTURE_WITH", "subType": "internal_absence", "weight": 0.84, "note": "分裂主体与缺失都标记内部空位"}, {"source": "desiring_machine", "target": "desire", "rel": "SHARES_STRUCTURE_WITH", "subType": "productive_desire", "weight": 0.88, "note": "欲望机器与欲望都不是静止状态，而是持续生产"}, {"source": "identity", "target": "price", "rel": "SHARES_STRUCTURE_WITH", "subType": "comparative_valuation", "weight": 0.71, "note": "身份常被放入比较与排序逻辑，类似价格机制"}, {"source": "recognition", "target": "credit", "rel": "SHARES_STRUCTURE_WITH", "subType": "trust_based_validation", "weight": 0.75, "note": "承认与信用都依赖来自他者或系统的有效确认"}, {"source": "persona", "target": "market", "rel": "SHARES_STRUCTURE_WITH", "subType": "display_and_selection", "weight": 0.68, "note": "面具与市场都涉及展示、选择与竞争"}, {"source": "alienation", "target": "debt", "rel": "SHARES_STRUCTURE_WITH", "subType": "binding_without_presence", "weight": 0.73, "note": "异化与债务都表现为被结构绑定却失去在场感"}, {"source": "subjectivation", "target": "coercion", "rel": "SHARES_STRUCTURE_WITH", "subType": "governed_formation", "weight": 0.77, "note": "主体化与强制力都指向可治理性的形成"}, {"source": "subject_production_cluster", "target": "cross_domain_homology_cluster", "rel": "RELATES_TO", "subType": "intersects_with", "weight": 0.84, "note": "主体生产结构与三域同构桥深度相交"}, {"source": "butler", "target": "subjectivation", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "butler", "target": "identity", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "deleuze_guattari", "target": "desiring_machine", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}, {"source": "deleuze_guattari", "target": "subject", "rel": "EMPHASIZES", "subType": "", "weight": 0.5, "note": ""}]};
+
+// Color scheme
+const COLORS = {
+  domain:        { bg: '#f0883e', border: '#f0883e', font: '#000' },
+  meta:          { bg: '#238636', border: '#7ee787', font: '#fff' },
+  language_core: { bg: '#1f6feb', border: '#58a6ff', font: '#fff' },
+  love_core:     { bg: '#bf3989', border: '#f778ba', font: '#fff' },
+  money_core:    { bg: '#8957e5', border: '#d2a8ff', font: '#fff' },
+  theory:        { bg: '#9e6a03', border: '#ffd700', font: '#fff' },
+  cluster:       { bg: '#196c2e', border: '#39d353', font: '#fff' },
+};
+
+function getColor(node) {
+  if (node.type === 'Domain') return COLORS.domain;
+  if (node.type === 'Theory') return COLORS.theory;
+  if (node.type === 'Cluster') return COLORS.cluster;
+  return COLORS[node.category] || COLORS.meta;
+}
+
+function getSize(node) {
+  if (node.type === 'Domain') return 32;
+  if (node.type === 'Cluster') return 22;
+  if (node.type === 'Theory') return 18;
+  return 14;
+}
+
+// Build node/edge index
+const nodeMap = {};
+GRAPH.nodes.forEach(n => { nodeMap[n.id] = n; });
+
+// Build adjacency
+const adj = {};  // key → [{edge, neighbor}]
+GRAPH.edges.forEach(e => {
+  if (!adj[e.source]) adj[e.source] = [];
+  if (!adj[e.target]) adj[e.target] = [];
+  adj[e.source].push({ edge: e, neighbor: e.target, dir: '→' });
+  adj[e.target].push({ edge: e, neighbor: e.source, dir: '←' });
+});
+
+// vis.js data
+const visNodes = new vis.DataSet(GRAPH.nodes.map(n => {
+  const c = getColor(n);
+  return {
+    id: n.id,
+    label: n.label,
+    size: getSize(n),
+    color: { background: c.bg, border: c.border, highlight: { background: c.border, border: '#fff' } },
+    font: { color: c.font, size: n.type === 'Domain' ? 16 : 12, face: 'PingFang SC, Microsoft YaHei, sans-serif' },
+    shape: n.type === 'Domain' ? 'diamond' : n.type === 'Theory' ? 'triangle' : n.type === 'Cluster' ? 'hexagon' : 'dot',
+    borderWidth: 2,
+    _data: n,
+  };
+}));
+
+const EDGE_COLORS = {
+  RELATES_TO: 'rgba(139,148,158,0.45)',
+  SHARES_STRUCTURE_WITH: 'rgba(240,136,62,0.6)',
+  EMPHASIZES: 'rgba(255,215,0,0.5)',
+  HAS_CONCEPT: 'rgba(63,185,80,0.35)',
+  BELONGS_TO: 'rgba(63,185,80,0.35)',
+  PART_OF: 'rgba(88,166,255,0.35)',
+  HAS_CLUSTER: 'rgba(88,166,255,0.35)',
+};
+const EDGE_DASHES = {
+  RELATES_TO: false,
+  SHARES_STRUCTURE_WITH: [8, 4],
+  EMPHASIZES: [2, 4],
+  HAS_CONCEPT: [4, 2],
+  BELONGS_TO: [4, 2],
+  PART_OF: false,
+  HAS_CLUSTER: false,
+};
+
+const visEdges = new vis.DataSet(GRAPH.edges.map((e, i) => ({
+  id: i,
+  from: e.source,
+  to: e.target,
+  color: { color: EDGE_COLORS[e.rel] || '#8b949e', opacity: 0.6, highlight: '#58a6ff' },
+  dashes: EDGE_DASHES[e.rel] || false,
+  width: Math.max(1, (e.weight || 0.5) * 2.5),
+  arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+  smooth: { type: 'continuous', roundness: 0.2 },
+  _data: e,
+})));
+
+// Network
+const container = document.getElementById('graph');
+const network = new vis.Network(container, { nodes: visNodes, edges: visEdges }, {
+  physics: {
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: { gravitationalConstant: -60, centralGravity: 0.008, springLength: 140, springConstant: 0.04, damping: 0.4 },
+    stabilization: { iterations: 200 },
+  },
+  interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true },
+  layout: { improvedLayout: true },
+});
+
+// Click → show panel
+const panel = document.getElementById('panel');
+
+network.on('click', function(params) {
+  if (params.nodes.length === 0) {
+    panel.classList.remove('open');
+    return;
+  }
+  const id = params.nodes[0];
+  const node = nodeMap[id];
+  if (!node) return;
+  showPanel(node);
+});
+
+function showPanel(node) {
+  document.getElementById('p-name').textContent = node.label;
+
+  const c = getColor(node);
+  document.getElementById('p-name').style.color = c.border;
+
+  // Subtitle
+  const parts = [];
+  if (node.type) parts.push(node.type);
+  if (node.category && node.category !== node.type.toLowerCase()) parts.push(node.category);
+  document.getElementById('p-subtitle').textContent = parts.join(' · ') + ' · ' + node.id;
+
+  // Description
+  document.getElementById('p-desc').textContent = node.description || '';
+
+  // Domains
+  const domEl = document.getElementById('p-domains');
+  if (node.domains && node.domains.length) {
+    const domColors = { language: '#58a6ff', love: '#f778ba', money: '#d2a8ff' };
+    const domNames = { language: '语言', love: '爱情', money: '货币' };
+    domEl.innerHTML = '<div class="section-title">所属领域</div>' +
+      node.domains.map(d =>
+        `<span class="tag" style="background:${domColors[d]}22;color:${domColors[d]};border:1px solid ${domColors[d]}44">${domNames[d] || d}</span>`
+      ).join('');
+  } else {
+    domEl.innerHTML = '';
+  }
+
+  // Relations
+  const relEl = document.getElementById('p-relations');
+  const neighbors = adj[node.id] || [];
+  if (neighbors.length) {
+    const relColors = {
+      RELATES_TO: '#8b949e',
+      SHARES_STRUCTURE_WITH: '#f0883e',
+      EMPHASIZES: '#ffd700',
+      HAS_CONCEPT: '#3fb950',
+      BELONGS_TO: '#3fb950',
+      PART_OF: '#58a6ff',
+      HAS_CLUSTER: '#58a6ff',
+    };
+    relEl.innerHTML = '<div class="section-title">关系 (' + neighbors.length + ')</div>' +
+      neighbors.map(n => {
+        const nb = nodeMap[n.neighbor];
+        const nbColor = nb ? getColor(nb).border : '#8b949e';
+        const relColor = relColors[n.edge.rel] || '#8b949e';
+        return `<div class="rel-item" onclick="navigateTo('${n.neighbor}')">
+          <span class="rel-arrow">${n.dir}</span>
+          <span class="rel-name" style="color:${nbColor}">${nb ? nb.label : n.neighbor}</span>
+          <span class="rel-type" style="color:${relColor}">${n.edge.subType || n.edge.rel}</span>
+          ${n.edge.note ? `<div class="rel-note">${n.edge.note}</div>` : ''}
+        </div>`;
+      }).join('');
+  } else {
+    relEl.innerHTML = '<div class="section-title">关系</div><div style="color:#8b949e;font-size:13px">无直接关系</div>';
+  }
+
+  panel.classList.add('open');
+}
+
+function navigateTo(nodeId) {
+  network.selectNodes([nodeId]);
+  network.focus(nodeId, { scale: 1.2, animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+  const node = nodeMap[nodeId];
+  if (node) showPanel(node);
+}
+
+document.getElementById('panel-close').onclick = () => panel.classList.remove('open');
+
+// Filters
+let currentFilter = 'all';
+document.querySelectorAll('#filters button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#filters button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    applyFilter(currentFilter);
+  };
+});
+
+function applyFilter(filter) {
+  if (filter === 'all') {
+    visNodes.forEach(n => visNodes.update({ id: n.id, hidden: false }));
+    visEdges.forEach(e => visEdges.update({ id: e.id, hidden: false }));
+    return;
+  }
+
+  if (filter === 'cross') {
+    const crossNodeIds = new Set();
+    visEdges.forEach(e => {
+      const isCross = e._data.rel === 'SHARES_STRUCTURE_WITH';
+      visEdges.update({ id: e.id, hidden: !isCross });
+      if (isCross) { crossNodeIds.add(e.from); crossNodeIds.add(e.to); }
+    });
+    visNodes.forEach(n => visNodes.update({ id: n.id, hidden: !crossNodeIds.has(n.id) }));
+    return;
+  }
+
+  if (filter === 'structure') {
+    const structRels = new Set(['HAS_CONCEPT','BELONGS_TO','PART_OF','HAS_CLUSTER']);
+    const structNodes = new Set();
+    visEdges.forEach(e => {
+      const isStruct = structRels.has(e._data.rel);
+      visEdges.update({ id: e.id, hidden: !isStruct });
+      if (isStruct) { structNodes.add(e.from); structNodes.add(e.to); }
+    });
+    visNodes.forEach(n => visNodes.update({ id: n.id, hidden: !structNodes.has(n.id) }));
+    return;
+  }
+
+  // Domain filter
+  const domainNodes = new Set();
+  GRAPH.nodes.forEach(n => {
+    if (n.type === 'Domain' && n.id === filter) domainNodes.add(n.id);
+    if (n.domains && n.domains.includes(filter)) domainNodes.add(n.id);
+    // Also show theories that emphasize concepts in this domain
+    if (n.type === 'Theory') {
+      const theoryEdges = (adj[n.id] || []).filter(a => domainNodes.has(a.neighbor) || (nodeMap[a.neighbor] && nodeMap[a.neighbor].domains && nodeMap[a.neighbor].domains.includes(filter)));
+      if (theoryEdges.length) domainNodes.add(n.id);
+    }
+  });
+  // Second pass for theories
+  GRAPH.nodes.forEach(n => {
+    if (n.type === 'Theory') {
+      const theoryNeighbors = (adj[n.id] || []).some(a => domainNodes.has(a.neighbor));
+      if (theoryNeighbors) domainNodes.add(n.id);
+    }
+  });
+
+  visNodes.forEach(n => visNodes.update({ id: n.id, hidden: !domainNodes.has(n.id) }));
+  visEdges.forEach(e => {
+    const show = domainNodes.has(e.from) && domainNodes.has(e.to);
+    visEdges.update({ id: e.id, hidden: !show });
+  });
+}
+
+// Double click → focus
+network.on('doubleClick', function(params) {
+  if (params.nodes.length) {
+    network.focus(params.nodes[0], { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+  } else {
+    network.fit({ animation: { duration: 400 } });
+  }
+});
+</script>
+</body>
+</html>
